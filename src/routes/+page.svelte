@@ -1,5 +1,9 @@
 <script lang="ts">
 	import { onMount } from "svelte";
+	import { goto } from "$app/navigation";
+	import { getAccessToken, isAuthenticated } from "$lib/client/auth0";
+	import { env } from "$env/dynamic/public";
+	import { dev } from "$app/environment";
 
 	type PlayerTotals = Record<string, number | null>;
 	type Option = {
@@ -56,6 +60,9 @@
 	let playerLoading = false;
 	let teamLoading = false;
 	let optionsLoading = false;
+	let authReady = false;
+	let authError = "";
+	const authBypass = dev && env.PUBLIC_AUTH0_BYPASS === "1";
 
 	let playerDropdownOpen = false;
 	let teamDropdownOpen = false;
@@ -117,6 +124,16 @@
 	const resetErrors = () => {
 		playerError = "";
 		teamError = "";
+	};
+
+	const authFetch = async (input: RequestInfo, init: RequestInit = {}) => {
+		if (authBypass) {
+			return fetch(input, init);
+		}
+		const token = await getAccessToken();
+		const headers = new Headers(init.headers ?? {});
+		headers.set("Authorization", `Bearer ${token}`);
+		return fetch(input, { ...init, headers });
 	};
 
 	const selectPlayer = (name: string) => {
@@ -647,8 +664,8 @@
 			optionsError = "";
 			try {
 				const [playersResponse, teamsResponse] = await Promise.all([
-					fetch("/api/players/all"),
-					fetch("/api/teams/all")
+					authFetch("/api/players/all"),
+					authFetch("/api/teams/all")
 				]);
 
 				if (!playersResponse.ok || !teamsResponse.ok) {
@@ -668,7 +685,33 @@
 			}
 		};
 
-		void loadOptions();
+		const bootstrap = async () => {
+			authError = "";
+			authReady = false;
+			const path = window.location.pathname;
+			if (authBypass) {
+				authReady = true;
+				await loadOptions();
+				return;
+			}
+			if (path === "/login" || path === "/signup" || path === "/logout" || path === "/auth/callback") {
+				authReady = true;
+				return;
+			}
+			try {
+				const authed = await isAuthenticated();
+				if (!authed) {
+					await goto("/login");
+					return;
+				}
+				authReady = true;
+				await loadOptions();
+			} catch (err) {
+				authError = err instanceof Error ? err.message : "Auth check failed.";
+			}
+		};
+
+		void bootstrap();
 
 		return () => {
 			document.removeEventListener("click", handleClick);
@@ -682,9 +725,13 @@
 			playerError = "Enter a player name.";
 			return;
 		}
+		if (!authReady) {
+			playerError = "Please log in to load player stats.";
+			return;
+		}
 		playerLoading = true;
 		try {
-			const response = await fetch(`/api/player/${playerSlug}`);
+			const response = await authFetch(`/api/player/${playerSlug}`);
 			if (!response.ok) {
 				playerError = await readError(response);
 				return;
@@ -704,9 +751,13 @@
 			teamError = "Enter a team name.";
 			return;
 		}
+		if (!authReady) {
+			teamError = "Please log in to load team stats.";
+			return;
+		}
 		teamLoading = true;
 		try {
-			const response = await fetch(`/api/team/${teamSlug}`);
+			const response = await authFetch(`/api/team/${teamSlug}`);
 			if (!response.ok) {
 				teamError = await readError(response);
 				return;
@@ -726,28 +777,42 @@
 </script>
 
 <svelte:head>
-	<title>FBSTS - Premier League stats explorer</title>
+	<title>fbsts</title>
 </svelte:head>
 
-<div class="page">
-	<header class="hero reveal" style="--delay: 0s">
-		<p class="eyebrow">FBSTS data layer</p>
-		<h1>Premier League 2024-25 stats (previous seasons soon)</h1>
-		<p class="tagline">
-			uses Postgres API routes to validate queries.
-		</p>
-		<div class="hero-actions">
-			<button class="primary" type="button" on:click={loadExample}>Load example queries</button>
-			<div class="hint">Slugs auto-generate as you type.</div>
+{#if !authReady}
+	<div class="auth-gate">
+		<p>Checking your session...</p>
+		{#if authError}
+			<p class="error">{authError}</p>
+		{/if}
+	</div>
+{:else}
+	<div class="page">
+		<div class="top-bar">
+			<a class="ghost logout-link" href="/logout">Log out</a>
 		</div>
-	</header>
+		<header class="hero reveal" style="--delay: 0s">
+			<p class="eyebrow">FBSTS data layer</p>
+			<h1>Premier League 2024-25 stats (previous seasons soon)</h1>
+			<p class="tagline">
+				uses Postgres API routes to validate queries.
+			</p>
+			<div class="hero-actions">
+				<button class="primary" type="button" on:click={loadExample}>Load example queries</button>
+				<div class="hint">Slugs auto-generate as you type.</div>
+			</div>
+		</header>
+		{#if authError}
+			<p class="error">{authError}</p>
+		{/if}
 
-	<section class="grid">
-		<article class="card reveal" style="--delay: 0.1s">
-			<header>
-				<h2>Player snapshot</h2>
-				<p>Totals and team splits.</p>
-			</header>
+		<section class="grid">
+			<article class="card reveal" style="--delay: 0.1s">
+				<header>
+					<h2>Player snapshot</h2>
+					<p>Totals and team splits.</p>
+				</header>
 			<form on:submit|preventDefault={loadPlayer}>
 				<div
 					class="input-group"
@@ -1005,17 +1070,18 @@
 					{/each}
 				</div>
 			{/if}
-		</article>
+			</article>
 
-	</section>
+		</section>
 
-	<footer class="foot reveal" style="--delay: 0.35s">
-		<div>
-			<strong>Next:</strong> build player and team pages off these endpoints.
-		</div>
-		<div class="hint">You can add caching in the API handlers once queries stabilize.</div>
-	</footer>
-</div>
+		<footer class="foot reveal" style="--delay: 0.35s">
+			<div>
+				<strong>Next:</strong> build player and team pages off these endpoints.
+			</div>
+			<div class="hint">You can add caching in the API handlers once queries stabilize.</div>
+		</footer>
+	</div>
+{/if}
 
 <style>
 	@import url("https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
@@ -1045,6 +1111,25 @@
 	.hero {
 		max-width: 840px;
 		margin-bottom: 40px;
+	}
+
+	.top-bar {
+		display: flex;
+		justify-content: flex-end;
+		margin-bottom: 16px;
+	}
+
+	.logout-link {
+		align-self: flex-start;
+	}
+
+	.auth-gate {
+		min-height: 100vh;
+		display: grid;
+		place-items: center;
+		text-align: center;
+		padding: 64px 8vw 72px;
+		color: #6c5f52;
 	}
 
 	.eyebrow {
@@ -1163,6 +1248,7 @@
 		border: 1px solid #d8ccbc;
 		background: #fff;
 		font: inherit;
+		color: inherit;
 	}
 
 	select {
@@ -1171,6 +1257,7 @@
 		border: 1px solid #d8ccbc;
 		background: #fff;
 		font: inherit;
+		color: inherit;
 	}
 
 	.dropdown {
