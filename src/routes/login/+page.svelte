@@ -19,6 +19,11 @@
 	};
 
 	onMount(async () => {
+		const resetLoading = () => {
+			loading = false;
+		};
+		window.addEventListener("pageshow", resetLoading);
+		window.addEventListener("focus", resetLoading);
 		try {
 			const client = await getAuth0Client();
 			if (await client.isAuthenticated()) {
@@ -27,6 +32,10 @@
 		} catch (err) {
 			error = err instanceof Error ? err.message : "Auth0 configuration error.";
 		}
+		return () => {
+			window.removeEventListener("pageshow", resetLoading);
+			window.removeEventListener("focus", resetLoading);
+		};
 	});
 </script>
 

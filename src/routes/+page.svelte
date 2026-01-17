@@ -109,8 +109,8 @@
 	$: teamSlug = toSlug(teamQuery);
 	$: playerMatches = filterOptions(playerOptions, playerQuery);
 	$: teamMatches = filterOptions(teamOptions, teamQuery);
-	$: playerSlugHref = playerSlug ? modeHref(`/api/player/${encodeURIComponent(playerSlug)}`, playerMode) : "";
-	$: teamSlugHref = teamSlug ? modeHref(`/api/team/${encodeURIComponent(teamSlug)}`, teamMode) : "";
+	$: playerSlugHref = playerSlug ? modeHref(`/api-view/player/${encodeURIComponent(playerSlug)}`, playerMode) : "";
+	$: teamSlugHref = teamSlug ? modeHref(`/api-view/team/${encodeURIComponent(teamSlug)}`, teamMode) : "";
 
 	const readError = async (response: Response) => {
 		try {
@@ -853,7 +853,7 @@
 				<div class="slug">
 					Slug:
 					{#if playerSlug}
-						<a class="slug-link" href={playerSlugHref} target="_blank">
+						<a class="slug-link" href={playerSlugHref}>
 							<code>{playerSlug}</code>
 						</a>
 					{:else}
@@ -990,7 +990,7 @@
 				<div class="slug">
 					Slug:
 					{#if teamSlug}
-						<a class="slug-link" href={teamSlugHref} target="_blank">
+						<a class="slug-link" href={teamSlugHref}>
 							<code>{teamSlug}</code>
 						</a>
 					{:else}

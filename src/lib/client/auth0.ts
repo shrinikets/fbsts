@@ -40,7 +40,8 @@ export const getAuth0Client = async () => {
 				redirect_uri: `${window.location.origin}/auth/callback`,
 				audience: audience || undefined
 			},
-			cacheLocation: "memory"
+			cacheLocation: "localstorage",
+			useRefreshTokens: true
 		});
 	}
 
