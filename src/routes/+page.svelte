@@ -720,8 +720,8 @@
 	};
 
 	const loadExample = () => {
-		playerQuery = "Erling Haaland";
-		teamQuery = "Chelsea";
+		playerQuery = "Bruno Fernandes";
+		teamQuery = "Manchester United";
 	};
 </script>
 
