@@ -57,7 +57,6 @@
 			<button type="button" on:click={startLogin} disabled={loading}>
 				{loading ? "Redirecting..." : "Continue with Auth0"}
 			</button>
-			<p class="hint">Google login works once you enable the Google connection in Auth0.</p>
 		</div>
 
 		<p class="footer">
@@ -139,6 +138,13 @@
 		font-weight: 700;
 		cursor: pointer;
 		box-shadow: 0 10px 24px rgba(15, 107, 79, 0.2);
+		transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+	}
+
+	button:hover {
+		transform: translateY(-1px);
+		filter: brightness(1.03);
+		box-shadow: 0 14px 28px rgba(15, 107, 79, 0.25);
 	}
 
 	.error {

@@ -61,7 +61,6 @@
 			<button type="button" on:click={startSignup} disabled={loading}>
 				{loading ? "Redirecting..." : "Create account with Auth0"}
 			</button>
-			<p class="hint">Use Auth0 Universal Login to reset passwords later.</p>
 		</div>
 
 		<p class="footer">
@@ -143,6 +142,13 @@
 		font-weight: 700;
 		cursor: pointer;
 		box-shadow: 0 10px 24px rgba(15, 107, 79, 0.2);
+		transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+	}
+
+	button:hover {
+		transform: translateY(-1px);
+		filter: brightness(1.03);
+		box-shadow: 0 14px 28px rgba(15, 107, 79, 0.25);
 	}
 
 	.error {

@@ -9,6 +9,7 @@
 	let error = "";
 	let payload = "";
 	let requestPath = "";
+	let copied = false;
 
 	const authBypass = dev && env.PUBLIC_AUTH0_BYPASS === "1";
 
@@ -45,6 +46,21 @@
 			loading = false;
 		}
 	});
+
+	const copyPayload = async () => {
+		if (!payload) {
+			return;
+		}
+		try {
+			await navigator.clipboard.writeText(payload);
+			copied = true;
+			window.setTimeout(() => {
+				copied = false;
+			}, 1400);
+		} catch (err) {
+			error = err instanceof Error ? err.message : "Copy failed.";
+		}
+	};
 </script>
 
 <svelte:head>
@@ -64,6 +80,21 @@
 			<p class="error">{error}</p>
 			<a class="back" href="/">Back to dashboard</a>
 		{:else}
+			<button class="copy-button" type="button" on:click={copyPayload} aria-label="Copy API response">
+				{#if copied}
+					<svg class="copy-icon check" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+						<path
+							d="M6.4 11.2 3.6 8.4l1.2-1.2 1.6 1.6 4.4-4.4 1.2 1.2-5.6 5.6Z"
+						/>
+					</svg>
+				{:else}
+					<svg class="copy-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+						<path
+							d="M10 1H4a2 2 0 0 0-2 2v6h2V3h6V1Zm2 3H7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h5a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 9H7V6h5v7Z"
+						/>
+					</svg>
+				{/if}
+			</button>
 			<pre>{payload}</pre>
 			<a class="back" href="/">Back to dashboard</a>
 		{/if}
@@ -106,6 +137,7 @@
 		box-shadow: 0 20px 40px rgba(46, 35, 28, 0.12);
 		display: grid;
 		gap: 16px;
+		position: relative;
 	}
 
 	h1 {
@@ -130,6 +162,39 @@
 		max-height: 70vh;
 		font-size: 0.85rem;
 		line-height: 1.5;
+	}
+
+	.copy-button {
+		position: absolute;
+		top: 20px;
+		right: 20px;
+		border: 1px solid #d2c5b8;
+		background: #fdfbf7;
+		border-radius: 12px;
+		padding: 8px;
+		cursor: pointer;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		color: #1e1a17;
+		transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+	}
+
+	.copy-button:hover {
+		background: #f1e8dc;
+		border-color: #cbbca9;
+		transform: translateY(-1px);
+	}
+
+	.copy-icon {
+		width: 18px;
+		height: 18px;
+		fill: currentColor;
+		transition: transform 0.2s ease, opacity 0.2s ease;
+	}
+
+	.copy-icon.check {
+		transform: scale(1.05);
 	}
 
 	.error {

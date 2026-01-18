@@ -795,9 +795,6 @@
 		<header class="hero reveal" style="--delay: 0s">
 			<p class="eyebrow">FBSTS data layer</p>
 			<h1>Premier League 2024-25 stats (previous seasons soon)</h1>
-			<p class="tagline">
-				uses Postgres API routes to validate queries.
-			</p>
 			<div class="hero-actions">
 				<button class="primary" type="button" on:click={loadExample}>Load example queries</button>
 				<div class="hint">Slugs auto-generate as you type.</div>
@@ -1074,12 +1071,17 @@
 
 		</section>
 
-		<footer class="foot reveal" style="--delay: 0.35s">
-			<div>
-				<strong>Next:</strong> build player and team pages off these endpoints.
-			</div>
-			<div class="hint">You can add caching in the API handlers once queries stabilize.</div>
-		</footer>
+	<footer class="foot reveal" style="--delay: 0.35s">
+		<a class="github-button" href="https://github.com/shrinikets/fbsts" target="_blank" rel="noreferrer">
+			<svg class="github-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+				<path
+					d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+				/>
+			</svg>
+		</a>
+		<div class="copyright">© 2026 Shriniket Sivakumar</div>
+		<span></span>
+	</footer>
 	</div>
 {/if}
 
@@ -1169,6 +1171,7 @@
 		border: none;
 		font: inherit;
 		cursor: pointer;
+		transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
 	}
 
 	.primary {
@@ -1180,6 +1183,12 @@
 		box-shadow: 0 10px 24px rgba(15, 107, 79, 0.2);
 	}
 
+	.primary:hover {
+		transform: translateY(-1px);
+		filter: brightness(1.03);
+		box-shadow: 0 14px 28px rgba(15, 107, 79, 0.25);
+	}
+
 	.ghost {
 		background: #fdfbf7;
 		color: #1e1a17;
@@ -1187,6 +1196,13 @@
 		padding: 10px 16px;
 		border-radius: 12px;
 		font-weight: 600;
+		transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+	}
+
+	.ghost:hover {
+		background: #f1e8dc;
+		border-color: #cbbca9;
+		transform: translateY(-1px);
 	}
 
 	.grid {
@@ -1402,14 +1418,49 @@
 
 	.foot {
 		margin-top: 32px;
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: space-between;
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
+		justify-items: center;
 		gap: 12px;
 		color: #5b4f44;
+		align-items: center;
 	}
 
 	.hint {
+		font-size: 0.9rem;
+		color: #6c5f52;
+	}
+
+	.github-button {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 14px;
+		border-radius: 999px;
+		border: 1px solid #d2c5b8;
+		background: #fdfbf7;
+		color: #1e1a17;
+		text-decoration: none;
+		font-weight: 600;
+		justify-self: start;
+		transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease,
+			box-shadow 0.2s ease;
+	}
+
+	.github-button:hover {
+		background: #f1e8dc;
+		border-color: #cbbca9;
+		transform: translateY(-1px);
+		box-shadow: 0 10px 20px rgba(46, 35, 28, 0.12);
+	}
+
+	.github-icon {
+		width: 18px;
+		height: 18px;
+		fill: currentColor;
+	}
+
+	.copyright {
 		font-size: 0.9rem;
 		color: #6c5f52;
 	}

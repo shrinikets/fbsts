@@ -83,5 +83,10 @@
 
 	.back {
 		color: #6c5f52;
+		transition: color 0.2s ease;
+	}
+
+	.back:hover {
+		color: #4b3e34;
 	}
 </style>
