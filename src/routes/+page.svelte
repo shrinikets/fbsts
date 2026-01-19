@@ -63,6 +63,7 @@
 	let authReady = false;
 	let authError = "";
 	const authBypass = dev && env.PUBLIC_AUTH0_BYPASS === "1";
+	const apiBase = env.PUBLIC_API_BASE?.replace(/\/+$/, "") ?? "";
 
 	let playerDropdownOpen = false;
 	let teamDropdownOpen = false;
@@ -127,13 +128,15 @@
 	};
 
 	const authFetch = async (input: RequestInfo, init: RequestInit = {}) => {
+		const target =
+			typeof input === "string" && input.startsWith("/api") ? `${apiBase}${input}` : input;
 		if (authBypass) {
-			return fetch(input, init);
+			return fetch(target, init);
 		}
 		const token = await getAccessToken();
 		const headers = new Headers(init.headers ?? {});
 		headers.set("Authorization", `Bearer ${token}`);
-		return fetch(input, { ...init, headers });
+		return fetch(target, { ...init, headers });
 	};
 
 	const selectPlayer = (name: string) => {

@@ -2,11 +2,19 @@ import os
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 
 
 RAW_TEAM_SCHEDULE = "fbref_team_match_schedule"
 RAW_PLAYER_SUMMARY = "fbref_player_match_summary"
+DEFAULT_SEASONS = [
+    "2020-2021",
+    "2021-2022",
+    "2022-2023",
+    "2023-2024",
+    "2024-2025",
+]
+DEFAULT_COMPETITION = "ENG-Premier League"
 TEAM_NAME_FIXUPS = {
     "Newcastle Utd": "Newcastle United",
     "Nott'ham Forest": "Nottingham Forest",
@@ -14,6 +22,19 @@ TEAM_NAME_FIXUPS = {
     "West Ham": "West Ham United",
     "Manchester Utd": "Manchester United",
 }
+
+
+def _parse_seasons(raw: str | None) -> list[str]:
+    if not raw:
+        return DEFAULT_SEASONS
+    seasons = [item.strip() for item in raw.split(",") if item.strip()]
+    return seasons or DEFAULT_SEASONS
+
+
+def _parse_competition(raw: str | None) -> str:
+    if not raw:
+        return DEFAULT_COMPETITION
+    return raw.strip() or DEFAULT_COMPETITION
 
 
 def _first_existing_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
@@ -35,7 +56,76 @@ def _apply_team_name_fixes(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame
     return df
 
 
-def _prepare_schedule(schedule: pd.DataFrame) -> pd.DataFrame:
+def _ensure_competition_column(df: pd.DataFrame, competition: str) -> pd.DataFrame:
+    if "competition" in df.columns:
+        return df
+    df = df.copy()
+    if "league" in df.columns:
+        df["competition"] = df["league"]
+    else:
+        df["competition"] = competition
+    return df
+
+
+def _filter_by_season_and_competition(
+    df: pd.DataFrame, seasons: list[str], competition: str
+) -> pd.DataFrame:
+    if "season" not in df.columns:
+        raise SystemExit(
+            "Missing season column in raw tables. Re-run ingest with the updated script "
+            "so seasons are tracked."
+        )
+
+    df = _ensure_competition_column(df, competition)
+    df = df[df["season"].isin(seasons)]
+    df = df[df["competition"] == competition]
+    return df
+
+
+def _table_exists(engine, table_name: str) -> bool:
+    inspector = inspect(engine)
+    return inspector.has_table(table_name)
+
+
+def _filter_existing_names(
+    engine, table_name: str, column: str, df: pd.DataFrame
+) -> pd.DataFrame:
+    if df.empty:
+        return df
+    if not _table_exists(engine, table_name):
+        return df
+    existing = pd.read_sql(f'SELECT "{column}" FROM {table_name}', engine)
+    if existing.empty:
+        return df
+    existing_names = set(existing[column].dropna().astype(str))
+    return df[~df[column].astype(str).isin(existing_names)]
+
+
+def _delete_existing_normalized(
+    engine, seasons: list[str], competition: str
+) -> None:
+    tables = [
+        ("player_match_stats", "competition", "season"),
+        ("team_match_stats", "competition", "season"),
+        ("matches", "competition", "season"),
+    ]
+    with engine.begin() as conn:
+        for table, comp_col, season_col in tables:
+            if not _table_exists(engine, table):
+                continue
+            conn.execute(
+                text(
+                    f"""
+                    DELETE FROM {table}
+                    WHERE {season_col} = ANY(:seasons)
+                      AND {comp_col} = :competition
+                    """
+                ),
+                {"seasons": seasons, "competition": competition},
+            )
+
+
+def _prepare_schedule(schedule: pd.DataFrame, competition: str) -> pd.DataFrame:
     if "game" not in schedule.columns and "game_id" not in schedule.columns:
         raise SystemExit("Schedule table missing game/game_id column.")
 
@@ -45,11 +135,12 @@ def _prepare_schedule(schedule: pd.DataFrame) -> pd.DataFrame:
             schedule = schedule.drop(columns=["game_id"])
         schedule = schedule.rename(columns={"game": "game_id"})
     schedule = schedule.loc[:, ~schedule.columns.duplicated()]
+    schedule = _ensure_competition_column(schedule, competition)
     schedule = _apply_team_name_fixes(schedule, ["team", "opponent"])
     return schedule
 
 
-def _prepare_player_summary(player_summary: pd.DataFrame) -> pd.DataFrame:
+def _prepare_player_summary(player_summary: pd.DataFrame, competition: str) -> pd.DataFrame:
     if "game" not in player_summary.columns and "game_id" not in player_summary.columns:
         raise SystemExit("Player summary missing game/game_id column.")
 
@@ -59,12 +150,13 @@ def _prepare_player_summary(player_summary: pd.DataFrame) -> pd.DataFrame:
             player_summary = player_summary.drop(columns=["game_id"])
         player_summary = player_summary.rename(columns={"game": "game_id"})
     player_summary = player_summary.loc[:, ~player_summary.columns.duplicated()]
+    player_summary = _ensure_competition_column(player_summary, competition)
     player_summary = _apply_team_name_fixes(player_summary, ["team"])
     return player_summary
 
 
 def _build_matches(schedule: pd.DataFrame, fbref_map: pd.DataFrame | None) -> pd.DataFrame:
-    required = {"game_id", "team", "opponent", "venue", "date", "league", "season"}
+    required = {"game_id", "team", "opponent", "venue", "date", "competition", "season"}
     missing = [col for col in required if col not in schedule.columns]
     if missing:
         raise SystemExit(f"Schedule table missing columns: {missing}")
@@ -92,7 +184,7 @@ def _build_matches(schedule: pd.DataFrame, fbref_map: pd.DataFrame | None) -> pd
         match_rows.append(
             {
                 "game_id": game_id,
-                "competition": row.get("league"),
+                "competition": row.get("competition"),
                 "season": row.get("season"),
                 "match_date": row.get("date"),
                 "home_team": home_team,
@@ -131,7 +223,17 @@ def _build_team_match_stats(schedule: pd.DataFrame) -> pd.DataFrame:
     else:
         stats["goals_against"] = pd.Series([pd.NA] * len(stats), dtype="Int64")
 
-    keep = ["game_id", "team", "opponent", "venue", "result", "goals_for", "goals_against"]
+    keep = [
+        "game_id",
+        "team",
+        "opponent",
+        "venue",
+        "result",
+        "goals_for",
+        "goals_against",
+        "competition",
+        "season",
+    ]
     return stats[keep]
 
 
@@ -156,6 +258,10 @@ def _build_player_match_stats(
     if missing:
         raise SystemExit(f"Player summary missing columns: {missing}")
 
+    drop_cols = [col for col in ["opponent", "competition", "season"] if col in stats.columns]
+    if drop_cols:
+        stats = stats.drop(columns=drop_cols)
+
     stats = stats.merge(opponent_df, on=["game_id", "team"], how="left")
 
     stats["minutes"] = _coerce_int(stats[minutes_col]) if minutes_col else pd.Series(
@@ -171,7 +277,18 @@ def _build_player_match_stats(
         [pd.NA] * len(stats), dtype="Int64"
     )
 
-    keep = ["game_id", "player", "team", "opponent", "minutes", "goals", "assists", "shots"]
+    keep = [
+        "game_id",
+        "player",
+        "team",
+        "opponent",
+        "minutes",
+        "goals",
+        "assists",
+        "shots",
+        "competition",
+        "season",
+    ]
     return stats[keep]
 
 
@@ -180,7 +297,23 @@ def main() -> None:
     if not db_url:
         raise SystemExit("Missing DATABASE_URL (e.g., postgresql://user:pass@localhost:5432/fbsts)")
 
+    seasons = _parse_seasons(os.environ.get("FBREF_SEASONS"))
+    competition = _parse_competition(os.environ.get("FBREF_COMPETITION"))
+    replace = os.environ.get("FBREF_RESET") == "1"
+
     engine = create_engine(db_url)
+
+    print(f"Seasons: {', '.join(seasons)}")
+    print(f"Competition: {competition}")
+    print("Mode: full reset" if replace else "Mode: incremental (append by season)")
+
+    if replace:
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS player_match_stats"))
+            conn.execute(text("DROP TABLE IF EXISTS players"))
+            conn.execute(text("DROP TABLE IF EXISTS team_match_stats"))
+            conn.execute(text("DROP TABLE IF EXISTS matches"))
+            conn.execute(text("DROP TABLE IF EXISTS teams"))
 
     schema_path = Path(__file__).resolve().parent / "normalize_schema.sql"
     with engine.begin() as conn:
@@ -188,6 +321,9 @@ def main() -> None:
 
     schedule = pd.read_sql(f"SELECT * FROM {RAW_TEAM_SCHEDULE}", engine)
     player_summary = pd.read_sql(f"SELECT * FROM {RAW_PLAYER_SUMMARY}", engine)
+
+    schedule = _filter_by_season_and_competition(schedule, seasons, competition)
+    player_summary = _filter_by_season_and_competition(player_summary, seasons, competition)
 
     if "game" in schedule.columns and "game" not in player_summary.columns:
         raise SystemExit(
@@ -206,25 +342,46 @@ def main() -> None:
             .rename(columns={"game": "game_id", "game_id": "fbref_match_id"})
         )
 
-    schedule_prepped = _prepare_schedule(schedule)
-    player_prepped = _prepare_player_summary(player_summary)
+    schedule_prepped = _prepare_schedule(schedule, competition)
+    player_prepped = _prepare_player_summary(player_summary, competition)
 
     matches = _build_matches(schedule_prepped, fbref_map)
+    matches = matches.dropna(subset=["game_id"]).drop_duplicates(subset=["game_id"])
     teams = _build_teams(schedule_prepped)
     team_match_stats = _build_team_match_stats(schedule_prepped)
 
     players = _build_players(player_prepped)
-    opponent_df = schedule_prepped[["game_id", "team", "opponent"]].dropna(
-        subset=["game_id", "team"]
-    )
+    opponent_df = schedule_prepped[
+        ["game_id", "team", "opponent", "competition", "season"]
+    ].dropna(subset=["game_id", "team"])
     opponent_df = opponent_df.drop_duplicates(subset=["game_id", "team"])
     player_match_stats = _build_player_match_stats(player_prepped, opponent_df)
 
-    teams.to_sql("teams", engine, if_exists="append", index=False)
-    matches.to_sql("matches", engine, if_exists="append", index=False)
-    team_match_stats.to_sql("team_match_stats", engine, if_exists="append", index=False)
-    players.to_sql("players", engine, if_exists="append", index=False)
-    player_match_stats.to_sql("player_match_stats", engine, if_exists="append", index=False)
+    if not replace:
+        _delete_existing_normalized(engine, seasons, competition)
+
+    match_ids = set(matches["game_id"].dropna().astype(str))
+    if match_ids:
+        team_match_stats = team_match_stats[team_match_stats["game_id"].astype(str).isin(match_ids)]
+        player_match_stats = player_match_stats[
+            player_match_stats["game_id"].astype(str).isin(match_ids)
+        ]
+
+    teams = teams.drop_duplicates(subset=["name"])
+    players = players.drop_duplicates(subset=["name"])
+    teams = _filter_existing_names(engine, "teams", "name", teams)
+    players = _filter_existing_names(engine, "players", "name", players)
+
+    if not teams.empty:
+        teams.to_sql("teams", engine, if_exists="append", index=False)
+    if not matches.empty:
+        matches.to_sql("matches", engine, if_exists="append", index=False)
+    if not team_match_stats.empty:
+        team_match_stats.to_sql("team_match_stats", engine, if_exists="append", index=False)
+    if not players.empty:
+        players.to_sql("players", engine, if_exists="append", index=False)
+    if not player_match_stats.empty:
+        player_match_stats.to_sql("player_match_stats", engine, if_exists="append", index=False)
 
     print(
         "Normalized tables created: teams, matches, team_match_stats, players, player_match_stats."

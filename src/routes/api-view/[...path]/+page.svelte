@@ -12,11 +12,13 @@
 	let copied = false;
 
 	const authBypass = dev && env.PUBLIC_AUTH0_BYPASS === "1";
+	const apiBase = env.PUBLIC_API_BASE?.replace(/\/+$/, "") ?? "";
 
 	onMount(async () => {
-		requestPath = `${window.location.pathname.replace("/api-view", "/api")}${
+		const apiPath = `${window.location.pathname.replace("/api-view", "/api")}${
 			window.location.search
 		}`;
+		requestPath = apiBase ? `${apiBase}${apiPath}` : apiPath;
 
 		if (!authBypass) {
 			const authed = await isAuthenticated();
