@@ -147,7 +147,7 @@
 
 	button:hover {
 		transform: translateY(-1px);
-		filter: brightness(1.03);
+		filter: brightness(1.04);
 		box-shadow: 0 14px 28px rgba(15, 107, 79, 0.25);
 	}
 
